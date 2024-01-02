@@ -324,8 +324,8 @@ class DualDigital(Priceable):
     NUM_PATH_PER_YEAR = 252
 
     def __init__(self,
-                 st1: float, k1: float, iv1: float, q1: float, b1: float, direction1: float,
-                 st2: float, k2: float, iv2: float, q2: float, b2: float, direction2: float,
+                 st1: float, k1: float, iv1: float, q1: float, b1: float, direction1: str,
+                 st2: float, k2: float, iv2: float, q2: float, b2: float, direction2: str,
                  rho: float, r: float, t: float, unit: int, model: str):
         super().__init__()
         self.st1 = st1
