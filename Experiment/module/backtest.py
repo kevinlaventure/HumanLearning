@@ -1,7 +1,9 @@
-import numpy as np
+import sys
+sys.path.append('/Users/kevinlaventure/Project/HumanLearning/Experiment/module')
 import pandas as pd
 from typing import Union
 from tqdm.auto import tqdm
+
 from pricing import DualDigital
 
 
@@ -49,7 +51,7 @@ class Backtest:
             )
 
             priceable_up.calculate_present_value()
-            priceable_up.calculate_greeks()
+            priceable_up.calculate_delta()
             pv_up = priceable_up.get_present_value()
             greeks_up = priceable_up.get_greeks()
 
@@ -60,17 +62,17 @@ class Backtest:
             )
 
             priceable_down.calculate_present_value()
-            priceable_down.calculate_greeks()
+            priceable_down.calculate_delta()
             pv_down = priceable_down.get_present_value()
             greeks_down = priceable_down.get_greeks()
 
             pv = pv_up + pv_down
             delta_st1 = (greeks_up.get('dst1') + greeks_down.get('dst1')) / st1
             delta_st2 = (greeks_up.get('dst2') + greeks_down.get('dst2')) / st2
-            gamma_st1 = (greeks_up.get('dst1**2') + greeks_down.get('dst1**2')) / (st1 ** 2)
-            gamma_st2 = (greeks_up.get('dst2**2') + greeks_down.get('dst2**2')) / (st2 ** 2)
-            x_gamma = (greeks_up.get('dst1*dst2') + greeks_down.get('dst1*dst2')) / (st1 * st2)
-            theta = greeks_up.get('dt') + greeks_down.get('dt')
+            # gamma_st1 = (greeks_up.get('dst1**2') + greeks_down.get('dst1**2')) / (st1 ** 2)
+            # gamma_st2 = (greeks_up.get('dst2**2') + greeks_down.get('dst2**2')) / (st2 ** 2)
+            # x_gamma = (greeks_up.get('dst1*dst2') + greeks_down.get('dst1*dst2')) / (st1 * st2)
+            # theta = greeks_up.get('dt') + greeks_down.get('dt')
 
             bt[date] = {
                 'business_day_to_expiry': business_day_to_expiry,
@@ -79,8 +81,8 @@ class Backtest:
                 'st1_pct': st1_pct, 'st2_pct': st2_pct,
                 'pv': pv,
                 'delta_st1': delta_st1, 'delta_st2': delta_st2,
-                'gamma_st1': gamma_st1, 'gamma_st2': gamma_st2,
-                'x_gamma': x_gamma, 'theta': theta
+                # 'gamma_st1': gamma_st1, 'gamma_st2': gamma_st2,
+                # 'x_gamma': x_gamma, 'theta': theta
             }
 
             business_day_to_expiry = business_day_to_expiry - 1
@@ -97,13 +99,13 @@ class Backtest:
         bt_df.loc[:, 'delta_st2_pnl'] = bt_df['st2'].diff() * bt_df['delta_st2'].shift()
         bt_df.loc[:, 'delta_pnl'] = bt_df['delta_st1_pnl'] + bt_df['delta_st2_pnl']
 
-        bt_df.loc[:, 'gamma_st1_pnl'] = bt_df['st1'].diff().pow(2) * bt_df['gamma_st1'].shift() * 0.5
-        bt_df.loc[:, 'gamma_st2_pnl'] = bt_df['st2'].diff().pow(2) * bt_df['gamma_st2'].shift() * 0.5
-        bt_df.loc[:, 'gamma_pnl'] = bt_df['gamma_st1_pnl'] + bt_df['gamma_st2_pnl']
-
-        bt_df.loc[:, 'x_gamma_pnl'] = bt_df['st1'].diff() * bt_df['st2'].diff() * bt_df['x_gamma'].shift()
-
-        bt_df.loc[:, 'explained_pnl'] = bt_df['delta_pnl'] + bt_df['gamma_pnl'] + bt_df['x_gamma_pnl'] + bt_df['theta']
+        # bt_df.loc[:, 'gamma_st1_pnl'] = bt_df['st1'].diff().pow(2) * bt_df['gamma_st1'].shift() * 0.5
+        # bt_df.loc[:, 'gamma_st2_pnl'] = bt_df['st2'].diff().pow(2) * bt_df['gamma_st2'].shift() * 0.5
+        # bt_df.loc[:, 'gamma_pnl'] = bt_df['gamma_st1_pnl'] + bt_df['gamma_st2_pnl']
+        #
+        # bt_df.loc[:, 'x_gamma_pnl'] = bt_df['st1'].diff() * bt_df['st2'].diff() * bt_df['x_gamma'].shift()
+        #
+        # bt_df.loc[:,'explained_pnl'] = bt_df['delta_pnl'] + bt_df['gamma_pnl'] + bt_df['x_gamma_pnl'] + bt_df['theta']
 
         bt_df.loc[:, 'delta_cumpnl'] = bt_df['delta_pnl'].cumsum()
         bt_df.loc[:, 'option_cumpnl'] = bt_df['option_pnl'].cumsum()

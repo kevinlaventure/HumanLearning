@@ -437,6 +437,7 @@ class DualDigital(Priceable):
         self.extra_output['individuals'] = (df['direction1'].sum() / df.shape[0], df['direction2'].sum() / df.shape[0])
         proba = df['direction1 & direction2'].sum() / df.shape[0]
         self.pv = proba * self.d
+        return df
 
     def calculate_present_value(self) -> None:
         """
@@ -465,3 +466,11 @@ class DualDigital(Priceable):
             self.greeks['dst1*dst2'] = self.calculate_derivative(parameter1='st1', parameter2='st2')
         else:
             self.greeks['dst1*dst2'] = np.nan
+
+    def calculate_delta(self) -> None:
+        if self.t > 0:
+            self.greeks['dst1'] = self.calculate_derivative(parameter1='st1', parameter2=None)
+            self.greeks['dst2'] = self.calculate_derivative(parameter1='st2', parameter2=None)
+        else:
+            self.greeks['dst1'] = np.nan
+            self.greeks['dst2'] = np.nan
