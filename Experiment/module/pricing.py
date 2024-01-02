@@ -459,3 +459,9 @@ class DualDigital(Priceable):
             self.greeks['dst2**2'] = np.nan
             self.greeks['dst1*dst2'] = np.nan
             self.greeks['dt'] = np.nan
+
+    def calculate_x_gamma(self) -> None:
+        if self.t > 0:
+            self.greeks['dst1*dst2'] = self.calculate_derivative(parameter1='st1', parameter2='st2')
+        else:
+            self.greeks['dst1*dst2'] = np.nan
