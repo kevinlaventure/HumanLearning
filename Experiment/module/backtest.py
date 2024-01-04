@@ -3,7 +3,6 @@ sys.path.append('/Users/kevinlaventure/Project/HumanLearning/Experiment/module')
 import pandas as pd
 from typing import Union
 from tqdm.auto import tqdm
-
 from pricing import DualDigital
 
 
@@ -111,4 +110,3 @@ class Backtest:
         bt_df.loc[:, 'option_cumpnl'] = bt_df['option_pnl'].cumsum()
 
         return bt_df
-
