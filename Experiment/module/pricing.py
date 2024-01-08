@@ -31,12 +31,11 @@ class MonteCarlo:
         """
         dt = 1 / self.num_path_per_year
 
-        ts = np.full(shape=(self.num_path + 1, self.num_simulation), fill_value=st)
+        ts = np.full(shape=(self.num_path + 1, self.num_simulation), fill_value=st, dtype=float)
 
-        z = np.random.standard_normal(size=self.num_simulation)
+        z = np.random.standard_normal(size=(self.num_path, self.num_simulation))
 
         drift = r - d - b
-
         for i in range(1, self.num_path + 1):
             ts[i] = ts[i - 1] * np.exp((drift - 0.5 * iv ** 2) * dt + iv * np.sqrt(dt) * z[i - 1])
 
@@ -64,8 +63,8 @@ class MonteCarlo:
         mu = np.array([0, 0])
         cov = np.array([[1, rho], [rho, 1]])
 
-        ts_1 = np.full(shape=(self.num_path + 1, self.num_simulation), fill_value=st1)
-        ts_2 = np.full(shape=(self.num_path + 1, self.num_simulation), fill_value=st2)
+        ts_1 = np.full(shape=(self.num_path + 1, self.num_simulation), fill_value=st1, dtype=float)
+        ts_2 = np.full(shape=(self.num_path + 1, self.num_simulation), fill_value=st2, dtype=float)
 
         z = np.random.multivariate_normal(mean=mu, cov=cov, size=(self.num_path, self.num_simulation))
 
@@ -474,3 +473,7 @@ class DualDigital(Priceable):
         else:
             self.greeks['dst1'] = np.nan
             self.greeks['dst2'] = np.nan
+
+
+mc = MonteCarlo(num_path=252, num_simulation=100)
+x = mc.univariate_gbm(st=100, iv=0.2, d=0, b=0, r=0)
