@@ -473,7 +473,3 @@ class DualDigital(Priceable):
         else:
             self.greeks['dst1'] = np.nan
             self.greeks['dst2'] = np.nan
-
-
-mc = MonteCarlo(num_path=252, num_simulation=100)
-x = mc.univariate_gbm(st=100, iv=0.2, d=0, b=0, r=0)
