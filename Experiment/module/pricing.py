@@ -1,81 +1,13 @@
+import sys
+sys.path.append('/Users/kevinlaventure/Project/HumanLearning/Experiment/module')
+
 import numpy as np
 import pandas as pd
+from typing import Union
 from scipy.stats import norm
-from typing import Union, Tuple
+from simulation import MonteCarlo
 from abc import ABC, abstractmethod
 from scipy.integrate import quad, nquad
-
-
-class MonteCarlo:
-
-    def __init__(self, num_path: int, num_simulation: int, num_path_per_year: int = 252):
-        """
-        Initialize a MonteCarlo object
-        @param num_path: number of path
-        @param num_simulation: number of simulation
-        @param num_path_per_year: number of path in a year, defaults to 252.
-        """
-        self.num_path = num_path
-        self.num_simulation = num_simulation
-        self.num_path_per_year = num_path_per_year
-
-    def univariate_gbm(self, st: float, iv: float, d: float, b: float, r: float):
-        """
-        Generate univariate geometric brownian motion
-        @param st: stock price
-        @param iv: implied volatility
-        @param d: continuously compounded dividend yield
-        @param b: continuously compounded repo rate or borrowing cost
-        @param r: continuously compounded risk-free interest rate
-        @return: single asset generated timeseries
-        """
-        dt = 1 / self.num_path_per_year
-
-        ts = np.full(shape=(self.num_path + 1, self.num_simulation), fill_value=st, dtype=float)
-
-        z = np.random.standard_normal(size=(self.num_path, self.num_simulation))
-
-        drift = r - d - b
-        for i in range(1, self.num_path + 1):
-            ts[i] = ts[i - 1] * np.exp((drift - 0.5 * iv ** 2) * dt + iv * np.sqrt(dt) * z[i - 1])
-
-        return ts
-
-    def bivariate_gbm(self,
-                      st1: float, iv1: float, q1: float, b1: float,
-                      st2: float, iv2: float, q2: float, b2: float,
-                      rho: float, r: float) -> Tuple[np.array, np.array]:
-        """
-        Generate bivariate geometric brownian motion
-        @param st1: asset 1 stock price
-        @param iv1: asset 1 implied volatility
-        @param q1: asset 1 continuously compounded dividend yield
-        @param b1: asset 1 continuously compounded repo rate or borrowing cost
-        @param st2: asset 2 stock price
-        @param iv2: asset 2 implied volatility
-        @param q2: asset 2 continuously compounded dividend yield
-        @param b2: asset 2 continuously compounded repo rate or borrowing cost
-        @param rho: implied correlation between asset 1 and asset 2
-        @param r: continuously compounded risk-free interest rate
-        @return: 2 correlated assets generated timeseries
-        """
-        dt = 1 / self.num_path_per_year
-        mu = np.array([0, 0])
-        cov = np.array([[1, rho], [rho, 1]])
-
-        ts_1 = np.full(shape=(self.num_path + 1, self.num_simulation), fill_value=st1, dtype=float)
-        ts_2 = np.full(shape=(self.num_path + 1, self.num_simulation), fill_value=st2, dtype=float)
-
-        z = np.random.multivariate_normal(mean=mu, cov=cov, size=(self.num_path, self.num_simulation))
-
-        drift_1 = r - q1 - b1
-        drift_2 = r - q2 - b2
-
-        for i in range(1, self.num_path + 1):
-            ts_1[i] = ts_1[i - 1] * np.exp((drift_1 - 0.5 * iv1 ** 2) * dt + iv1 * np.sqrt(dt) * z[i - 1, :, 0])
-            ts_2[i] = ts_2[i - 1] * np.exp((drift_2 - 0.5 * iv2 ** 2) * dt + iv2 * np.sqrt(dt) * z[i - 1, :, 1])
-
-        return ts_1, ts_2
 
 
 class Priceable(ABC):
@@ -221,7 +153,7 @@ class OptionPricing(Priceable):
         self.d = np.exp(-self.r * self.t)
         self.scaled_iv = self.iv * np.sqrt(self.t)
 
-    def calculate_intrinsic_value(self) -> None:
+    def _calculate_intrinsic_value(self) -> None:
         if self.kind == 'call':
             self.pv = max(0.0, self.st - self.k)
         elif self.kind == 'put':
@@ -275,7 +207,7 @@ class OptionPricing(Priceable):
                 raise ValueError
             self.pv = quad(self._integrand, l_bound, u_bound, args=(self.k, mu, self.scaled_iv, self.kind))[0] * self.d
         else:
-            self.calculate_intrinsic_value()
+            self._calculate_intrinsic_value()
 
     def black_scholes(self) -> None:
         self.__post_init__()
@@ -289,7 +221,7 @@ class OptionPricing(Priceable):
             else:
                 raise ValueError
         else:
-            self.calculate_intrinsic_value()
+            self._calculate_intrinsic_value()
 
     def calculate_present_value(self) -> None:
         """
@@ -350,7 +282,7 @@ class DualDigital(Priceable):
         self.fwd2 = self.st2 * np.exp((self.r - self.q2 - self.b2) * self.t)
         self.d = np.exp(-self.r * self.t)
 
-    def calculate_intrinsic_value(self):
+    def _calculate_intrinsic_value(self):
         if self.direction1 == 'up':
             if self.st1 > self.k1:
                 r1 = 1
@@ -410,7 +342,7 @@ class DualDigital(Priceable):
             e_payoff = nquad(self._integrand, ranges=[bound1, bound2], args=(mu1, mu2, iv1, iv2, self.rho, self.unit))[0]
             self.pv = e_payoff * self.d
         else:
-            self.calculate_intrinsic_value()
+            self._calculate_intrinsic_value()
 
     def montecarlo(self):
         self.__post_init__()
@@ -435,7 +367,7 @@ class DualDigital(Priceable):
         df['direction1 & direction2'] = ((df['direction1'] + df['direction2']) == 2).astype(int)
         self.extra_output['individuals'] = (df['direction1'].sum() / df.shape[0], df['direction2'].sum() / df.shape[0])
         proba = df['direction1 & direction2'].sum() / df.shape[0]
-        self.pv = proba * self.d
+        self.pv = proba * self.d * self.unit
         return df
 
     def calculate_present_value(self) -> None:
@@ -460,12 +392,6 @@ class DualDigital(Priceable):
             self.greeks['dst1*dst2'] = np.nan
             self.greeks['dt'] = np.nan
 
-    def calculate_x_gamma(self) -> None:
-        if self.t > 0:
-            self.greeks['dst1*dst2'] = self.calculate_derivative(parameter1='st1', parameter2='st2')
-        else:
-            self.greeks['dst1*dst2'] = np.nan
-
     def calculate_delta(self) -> None:
         if self.t > 0:
             self.greeks['dst1'] = self.calculate_derivative(parameter1='st1', parameter2=None)
@@ -473,3 +399,11 @@ class DualDigital(Priceable):
         else:
             self.greeks['dst1'] = np.nan
             self.greeks['dst2'] = np.nan
+
+    def calculate_x_gamma(self) -> None:
+        if self.t > 0:
+            self.greeks['dst1*dst2'] = self.calculate_derivative(parameter1='st1', parameter2='st2')
+        else:
+            self.greeks['dst1*dst2'] = np.nan
+
+
