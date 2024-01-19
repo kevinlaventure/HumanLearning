@@ -1,15 +1,37 @@
 import sys
+
 sys.path.append('/Users/kevinlaventure/Project/HumanLearning/Experiment/module')
 
 import pandas as pd
 from copy import copy
+from typing import Union
 from tqdm.auto import tqdm
-from pricing import DualDigital
+from abc import ABC, abstractmethod
+from pricing import DualDigitalPricer
 
 
-class Backtest:
+class Backtest(ABC):
+    def __init__(self, periods_per_year: int = 252, display_bt_progress: bool = False):
+        self.periods_per_year = periods_per_year
+        self.display_bt_progress = display_bt_progress
+
+    @abstractmethod
+    def _calculate_iterator(self, priceable_data, compute_extra_output, display_progress):
+        ...
+
+    @abstractmethod
+    def calculate_backtest(self, **kwargs):
+        ...
+
+    @abstractmethod
+    def get_results(self):
+        ...
+
+
+class DualDigitalBacktest(Backtest):
 
     def __init__(self, periods_per_year: int = 252, display_bt_progress: bool = False):
+        super().__init__(periods_per_year, display_bt_progress)
         self.periods_per_year = periods_per_year
         self.display_bt_progress = display_bt_progress
 
@@ -19,10 +41,10 @@ class Backtest:
         for col in pnl_col:
             df.loc[:, f'cum_{col}'] = df[col].cumsum()
 
-    def dual_digital(self,
-                     priceable_data: dict,
-                     compute_extra_output: bool = False,
-                     display_bt_progress: bool = False) -> pd.DataFrame:
+    def _calculate_iterator(self,
+                            priceable_data: dict,
+                            compute_extra_output: bool = False,
+                            display_bt_progress: bool = False) -> pd.DataFrame:
 
         # -------
         # COMPUTE PRODUCT PV AND GREEKS TIMESERIES
@@ -30,13 +52,14 @@ class Backtest:
 
         periods = list(priceable_data.keys())
         bt_data = copy(priceable_data)
+
         for date in tqdm(periods, display=display_bt_progress):
 
             # -------
             # COMPUTE PRODUCT PV
             # -------
 
-            priceable = DualDigital(**priceable_data.get(date))
+            priceable = DualDigitalPricer(**priceable_data.get(date))
 
             priceable.calculate_present_value()
             pv = priceable.get_present_value()
@@ -79,13 +102,25 @@ class Backtest:
 
             bt_data_df.loc[:, 'gamma_pnl'] = bt_data_df['gamma_st1_pnl'] + bt_data_df['gamma_st2_pnl']
 
-            bt_data_df.loc[:, 'x_gamma_pnl'] = bt_data_df['st1'].diff() * bt_data_df['st2'].diff() * bt_data_df['x_gamma'].shift()
+            bt_data_df.loc[:, 'x_gamma_pnl'] = bt_data_df['st1'].diff() * bt_data_df['st2'].diff() * bt_data_df[
+                'x_gamma'].shift()
 
             bt_data_df.loc[:, 'explained_pnl'] = bt_data_df['delta_pnl']
             bt_data_df.loc[:, 'explained_pnl'] += bt_data_df['gamma_pnl']
             bt_data_df.loc[:, 'explained_pnl'] += bt_data_df['x_gamma_pnl']
             bt_data_df.loc[:, 'explained_pnl'] += bt_data_df['theta'].shift()
-
-        self._compute_cum_pnl(bt_data_df)
+            self._compute_cum_pnl(bt_data_df)
 
         return bt_data_df
+
+    def calculate_backtest(self,
+                           df: pd.DataFrame,
+                           roll_period: Union[None, int],
+                           k1_pct: float,
+                           k2_pct: float,
+                           rolling_window: Union[None, int] = None):
+        pass
+
+    def get_results(self):
+        pass
+

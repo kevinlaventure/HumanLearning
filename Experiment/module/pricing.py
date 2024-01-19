@@ -84,11 +84,11 @@ class Priceable(ABC):
         return self.greeks
 
 
-class Forward(Priceable):
+class ForwardPricer(Priceable):
 
     def __init__(self, st: float, k: float, q: float, b: float, r: float, t: float):
         """
-        Initialize a Forward object
+        Initialize a Forward pricer
         @param st: stock price
         @param k: strike price
         @param q: continuously compounded dividend yield
@@ -122,11 +122,11 @@ class Forward(Priceable):
         self.greeks['dt'] = self.calculate_derivative(parameter1='t', parameter2=None) * -(1/252)
 
 
-class OptionPricing(Priceable):
+class OptionPricer(Priceable):
 
     def __init__(self, st: float, k: float, iv: float, q: float, b: float, r: float, t: float, kind: str, model: str):
         """
-        Initialize a OptionPricing object
+        Initialize a OptionPricing pricer
         @param st: stock price
         @param k: strike price
         @param iv: implied volatility
@@ -250,7 +250,7 @@ class OptionPricing(Priceable):
             self.greeks['dt'] = np.nan
 
 
-class DualDigital(Priceable):
+class DualDigitalPricer(Priceable):
     NUM_SIMULATION = 15_000
     NUM_PATH_PER_YEAR = 252
 
@@ -405,5 +405,3 @@ class DualDigital(Priceable):
             self.greeks['dst1*dst2'] = self.calculate_derivative(parameter1='st1', parameter2='st2')
         else:
             self.greeks['dst1*dst2'] = np.nan
-
-
