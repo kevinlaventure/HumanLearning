@@ -11,7 +11,11 @@ from scipy.integrate import quad, nquad
 
 
 class Priceable(ABC):
+
     def __init__(self):
+        """
+        Pricer blueprint
+        """
         self.pv: Union[None, float] = None
         self.greeks = dict()
         self.extra_output = dict()
@@ -20,11 +24,17 @@ class Priceable(ABC):
     def calculate_present_value(self) -> None:
         ...
 
+    def get_present_value(self) -> float:
+        return self.pv
+
     @abstractmethod
     def calculate_greeks(self) -> None:
         ...
 
-    def calculate_derivative(self, parameter1: str, parameter2: Union[None, str], dx: float = 0.01) -> float:
+    def get_greeks(self):
+        return self.greeks
+
+    def _calculate_derivative(self, parameter1: str, parameter2: Union[None, str], dx: float = 0.01) -> float:
 
         # -------
         # RETRIEVE INITIAL PV
@@ -77,12 +87,6 @@ class Priceable(ABC):
         self.pv = init_pv
         return result
 
-    def get_present_value(self) -> float:
-        return self.pv
-
-    def get_greeks(self):
-        return self.greeks
-
 
 class ForwardPricer(Priceable):
 
@@ -113,13 +117,13 @@ class ForwardPricer(Priceable):
         self.pv = (self.fwd - self.k) * self.d
 
     def calculate_greeks(self) -> None:
-        self.greeks['dst'] = self.calculate_derivative(parameter1='st', parameter2=None)
-        self.greeks['dst**2'] = self.calculate_derivative(parameter1='st', parameter2='st')
-        self.greeks['dk'] = self.calculate_derivative(parameter1='k', parameter2=None)
-        self.greeks['dq'] = self.calculate_derivative(parameter1='q', parameter2=None) * 0.01
-        self.greeks['db'] = self.calculate_derivative(parameter1='b', parameter2=None) * 0.01
-        self.greeks['dr'] = self.calculate_derivative(parameter1='r', parameter2=None) * 0.01
-        self.greeks['dt'] = self.calculate_derivative(parameter1='t', parameter2=None) * -(1/252)
+        self.greeks['dst'] = self._calculate_derivative(parameter1='st', parameter2=None)
+        self.greeks['dst**2'] = self._calculate_derivative(parameter1='st', parameter2='st')
+        self.greeks['dk'] = self._calculate_derivative(parameter1='k', parameter2=None)
+        self.greeks['dq'] = self._calculate_derivative(parameter1='q', parameter2=None) * 0.01
+        self.greeks['db'] = self._calculate_derivative(parameter1='b', parameter2=None) * 0.01
+        self.greeks['dr'] = self._calculate_derivative(parameter1='r', parameter2=None) * 0.01
+        self.greeks['dt'] = self._calculate_derivative(parameter1='t', parameter2=None) * -(1/252)
 
 
 class OptionPricer(Priceable):
@@ -224,21 +228,18 @@ class OptionPricer(Priceable):
             self._calculate_intrinsic_value()
 
     def calculate_present_value(self) -> None:
-        """
-        Calculate present discounted value
-        """
         getattr(self, self.model)()
 
     def calculate_greeks(self) -> None:
         if self.t > 0:
-            self.greeks['dst'] = self.calculate_derivative(parameter1='st', parameter2=None)
-            self.greeks['dst**2'] = self.calculate_derivative(parameter1='st', parameter2='st')
-            self.greeks['dk'] = self.calculate_derivative(parameter1='k', parameter2=None)
-            self.greeks['div'] = self.calculate_derivative(parameter1='iv', parameter2=None) * 0.01
-            self.greeks['dq'] = self.calculate_derivative(parameter1='q', parameter2=None) * 0.01
-            self.greeks['db'] = self.calculate_derivative(parameter1='b', parameter2=None) * 0.01
-            self.greeks['dr'] = self.calculate_derivative(parameter1='r', parameter2=None) * 0.01
-            self.greeks['dt'] = self.calculate_derivative(parameter1='t', parameter2=None) * -(1/252)
+            self.greeks['dst'] = self._calculate_derivative(parameter1='st', parameter2=None)
+            self.greeks['dst**2'] = self._calculate_derivative(parameter1='st', parameter2='st')
+            self.greeks['dk'] = self._calculate_derivative(parameter1='k', parameter2=None)
+            self.greeks['div'] = self._calculate_derivative(parameter1='iv', parameter2=None) * 0.01
+            self.greeks['dq'] = self._calculate_derivative(parameter1='q', parameter2=None) * 0.01
+            self.greeks['db'] = self._calculate_derivative(parameter1='b', parameter2=None) * 0.01
+            self.greeks['dr'] = self._calculate_derivative(parameter1='r', parameter2=None) * 0.01
+            self.greeks['dt'] = self._calculate_derivative(parameter1='t', parameter2=None) * -(1/252)
         else:
             self.greeks['dst'] = np.nan
             self.greeks['dst**2'] = np.nan
@@ -257,7 +258,27 @@ class DualDigitalPricer(Priceable):
     def __init__(self,
                  st1: float, k1: float, iv1: float, q1: float, b1: float, direction1: str,
                  st2: float, k2: float, iv2: float, q2: float, b2: float, direction2: str,
-                 rho: float, r: float, t: float, unit: int, model: str):
+                 rho: float, r: float, t: float, notional: int, model: str):
+        """
+        Initialize a OptionPricing pricer
+        :param st1: asset 1 stock price
+        :param k1: asset 1 strike price
+        :param iv1: asset 1 implied volatility
+        :param q1: asset 1 continuously compounded dividend yield
+        :param b1: asset 1 continuously compounded repo rate or borrowing cost
+        :param direction1: 'up' or 'down'
+        :param st2: asset 2 stock price
+        :param k2: asset 2 strike price
+        :param iv2: asset 2 implied volatility
+        :param q2: asset 2 continuously compounded dividend yield
+        :param b2: asset 2 continuously compounded repo rate or borrowing cost
+        :param direction2: 'up' or 'down'
+        :param rho: implied correlation
+        :param r: continuously compounded risk-free interest rate
+        :param t: time in fraction of a year
+        :param notional: currency value of payoff if exercised
+        :param model: 'montecarlo' or 'numerical_integration'
+        """
         super().__init__()
         self.st1 = st1
         self.k1 = k1
@@ -274,7 +295,7 @@ class DualDigitalPricer(Priceable):
         self.rho = rho
         self.r = r
         self.t = t
-        self.unit = unit
+        self.notional = notional
         self.model = model
 
     def __post_init__(self):
@@ -311,7 +332,7 @@ class DualDigitalPricer(Priceable):
 
         r3 = r1 + r2
         if r3 == 2:
-            self.pv = self.unit
+            self.pv = self.notional
         else:
             self.pv = 0
 
@@ -325,8 +346,8 @@ class DualDigitalPricer(Priceable):
         term6 = np.exp(term2*(term3+term4+term5))
         return term1 * term6
 
-    def _integrand(self, st1: float, st2: float, mu1: float, mu2: float, iv1: float, iv2: float, rho: float, unit: int):
-        return unit * self._bivariate_log_normal_pdf(st1, st2, mu1, mu2, iv1, iv2, rho)
+    def _integrand(self, st1: float, st2: float, mu1: float, mu2: float, iv1: float, iv2: float, rho: float, notional: int):
+        return notional * self._bivariate_log_normal_pdf(st1, st2, mu1, mu2, iv1, iv2, rho)
 
     def numerical_integration(self):
         if self.t > 0:
@@ -339,7 +360,7 @@ class DualDigitalPricer(Priceable):
             iv2 = self.iv2 * np.sqrt(self.t)
             bound1 = [self.k1, np.inf] if self.direction1 == 'up' else [0, self.k1]
             bound2 = [self.k2, np.inf] if self.direction2 == 'up' else [0, self.k2]
-            e_payoff = nquad(self._integrand, ranges=[bound1, bound2], args=(mu1, mu2, iv1, iv2, self.rho, self.unit))[0]
+            e_payoff = nquad(self._integrand, ranges=[bound1, bound2], args=(mu1, mu2, iv1, iv2, self.rho, self.notional))[0]
             self.pv = e_payoff * self.d
         else:
             self._calculate_intrinsic_value()
@@ -367,23 +388,20 @@ class DualDigitalPricer(Priceable):
         df['direction1 & direction2'] = ((df['direction1'] + df['direction2']) == 2).astype(int)
         self.extra_output['individuals'] = (df['direction1'].sum() / df.shape[0], df['direction2'].sum() / df.shape[0])
         proba = df['direction1 & direction2'].sum() / df.shape[0]
-        self.pv = proba * self.d * self.unit
+        self.pv = proba * self.d * self.notional
         return df
 
     def calculate_present_value(self) -> None:
-        """
-        Calculate present discounted value
-        """
         getattr(self, self.model)()
 
     def calculate_greeks(self) -> None:
         if self.t > 0:
-            self.greeks['dst1'] = self.calculate_derivative(parameter1='st1', parameter2=None)
-            self.greeks['dst2'] = self.calculate_derivative(parameter1='st2', parameter2=None)
-            self.greeks['dst1**2'] = self.calculate_derivative(parameter1='st1', parameter2='st1')
-            self.greeks['dst2**2'] = self.calculate_derivative(parameter1='st2', parameter2='st2')
-            self.greeks['dst1*dst2'] = self.calculate_derivative(parameter1='st1', parameter2='st2')
-            self.greeks['dt'] = self.calculate_derivative(parameter1='t', parameter2=None) * -(1/252)
+            self.greeks['dst1'] = self._calculate_derivative(parameter1='st1', parameter2=None)
+            self.greeks['dst2'] = self._calculate_derivative(parameter1='st2', parameter2=None)
+            self.greeks['dst1**2'] = self._calculate_derivative(parameter1='st1', parameter2='st1')
+            self.greeks['dst2**2'] = self._calculate_derivative(parameter1='st2', parameter2='st2')
+            self.greeks['dst1*dst2'] = self._calculate_derivative(parameter1='st1', parameter2='st2')
+            self.greeks['dt'] = self._calculate_derivative(parameter1='t', parameter2=None) * -(1/252)
         else:
             self.greeks['dst1'] = np.nan
             self.greeks['dst2'] = np.nan
@@ -394,14 +412,14 @@ class DualDigitalPricer(Priceable):
 
     def calculate_delta(self) -> None:
         if self.t > 0:
-            self.greeks['dst1'] = self.calculate_derivative(parameter1='st1', parameter2=None)
-            self.greeks['dst2'] = self.calculate_derivative(parameter1='st2', parameter2=None)
+            self.greeks['dst1'] = self._calculate_derivative(parameter1='st1', parameter2=None)
+            self.greeks['dst2'] = self._calculate_derivative(parameter1='st2', parameter2=None)
         else:
             self.greeks['dst1'] = np.nan
             self.greeks['dst2'] = np.nan
 
     def calculate_x_gamma(self) -> None:
         if self.t > 0:
-            self.greeks['dst1*dst2'] = self.calculate_derivative(parameter1='st1', parameter2='st2')
+            self.greeks['dst1*dst2'] = self._calculate_derivative(parameter1='st1', parameter2='st2')
         else:
             self.greeks['dst1*dst2'] = np.nan
