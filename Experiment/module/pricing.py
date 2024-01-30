@@ -18,7 +18,6 @@ class Priceable(ABC):
         """
         self.pv: Union[None, float] = None
         self.greeks = dict()
-        self.extra_output = dict()
 
     @abstractmethod
     def calculate_present_value(self) -> None:
@@ -252,7 +251,7 @@ class OptionPricer(Priceable):
 
 
 class DualDigitalPricer(Priceable):
-    NUM_SIMULATION = 15_000
+    NUM_SIMULATION = 20_000
     NUM_PATH_PER_YEAR = 252
 
     def __init__(self,
@@ -306,32 +305,32 @@ class DualDigitalPricer(Priceable):
     def _calculate_intrinsic_value(self):
         if self.direction1 == 'up':
             if self.st1 > self.k1:
-                r1 = 1
+                c1 = 1
             else:
-                r1 = 0
+                c1 = 0
         elif self.direction1 == 'down':
             if self.st1 < self.k1:
-                r1 = 1
+                c1 = 1
             else:
-                r1 = 0
+                c1 = 0
         else:
             raise ValueError
 
         if self.direction2 == 'up':
             if self.st2 > self.k2:
-                r2 = 1
+                c2 = 1
             else:
-                r2 = 0
+                c2 = 0
         elif self.direction2 == 'down':
             if self.st2 < self.k2:
-                r2 = 1
+                c2 = 1
             else:
-                r2 = 0
+                c2 = 0
         else:
             raise ValueError
 
-        r3 = r1 + r2
-        if r3 == 2:
+        c3 = c1 + c2
+        if c3 == 2:
             self.pv = self.notional
         else:
             self.pv = 0
@@ -349,7 +348,31 @@ class DualDigitalPricer(Priceable):
     def _integrand(self, st1: float, st2: float, mu1: float, mu2: float, iv1: float, iv2: float, rho: float, notional: int):
         return notional * self._bivariate_log_normal_pdf(st1, st2, mu1, mu2, iv1, iv2, rho)
 
-    def numerical_integration(self):
+    def numerical_integration(self) -> None:
+        if self.t > 0:
+            self.__post_init__()
+
+            d_fwd1 = self.fwd1 * self.d
+            d_fwd2 = self.fwd2 * self.d
+
+            nst1, nst2 = 1, 1
+            nk1 = self.k1 / d_fwd1
+            nk2 = self.k2 / d_fwd2
+
+            mu1 = np.log(nst1) + (self.r - 0.5 * self.iv1 ** 2) * self.t
+            mu2 = np.log(nst2) + (self.r - 0.5 * self.iv2 ** 2) * self.t
+            iv1 = self.iv1 * np.sqrt(self.t)
+            iv2 = self.iv2 * np.sqrt(self.t)
+            bound1 = [nk1, np.inf] if self.direction1 == 'up' else [0, nk1]
+            bound2 = [nk2, np.inf] if self.direction2 == 'up' else [0, nk2]
+
+            e_payoff = nquad(self._integrand, ranges=[bound1, bound2], args=(mu1, mu2, iv1, iv2, self.rho, self.notional))[0]
+
+            self.pv = e_payoff * self.d
+        else:
+            self._calculate_intrinsic_value()
+
+    def numerical_integration_old(self):
         if self.t > 0:
             self.__post_init__()
             d_fwd1 = self.fwd1 * self.d
@@ -365,31 +388,34 @@ class DualDigitalPricer(Priceable):
         else:
             self._calculate_intrinsic_value()
 
-    def montecarlo(self):
+    def montecarlo(self) -> None:
         self.__post_init__()
         num_path = int(self.NUM_PATH_PER_YEAR * self.t)
         mc = MonteCarlo(num_path=num_path, num_simulation=self.NUM_SIMULATION, num_path_per_year=self.NUM_PATH_PER_YEAR)
+
         ts_1, ts_2 = mc.bivariate_gbm(
-            st1=self.st1, iv1=self.iv1, q1=self.q1, b1=self.b1,
-            st2=self.st1, iv2=self.iv1, q2=self.q1, b2=self.b1,
+            st1=1, iv1=self.iv1, q1=self.q1, b1=self.b1,
+            st2=1, iv2=self.iv2, q2=self.q2, b2=self.b2,
             rho=self.rho, r=self.r)
 
-        df = pd.DataFrame([pd.DataFrame(ts_1).iloc[-1], pd.DataFrame(ts_2).iloc[-1]]).transpose()
-        df.columns = ['ts_1', 'ts_2']
         if self.direction1 == 'up':
-            df['direction1'] = (df['ts_1'] > self.k1).astype(int)
+            c1 = ts_1[-1] > self.k1/self.st1
         elif self.direction1 == 'down':
-            df['direction1'] = (df['ts_1'] < self.k1).astype(int)
-        if self.direction2 == 'up':
-            df['direction2'] = (df['ts_2'] > self.k2).astype(int)
-        elif self.direction1 == 'down':
-            df['direction2'] = (df['ts_2'] < self.k2).astype(int)
+            c1 = ts_1[-1] < self.k1/self.st1
+        else:
+            raise ValueError
 
-        df['direction1 & direction2'] = ((df['direction1'] + df['direction2']) == 2).astype(int)
-        self.extra_output['individuals'] = (df['direction1'].sum() / df.shape[0], df['direction2'].sum() / df.shape[0])
-        proba = df['direction1 & direction2'].sum() / df.shape[0]
-        self.pv = proba * self.d * self.notional
-        return df
+        if self.direction2 == 'up':
+            c2 = ts_2[-1] > self.k2/self.st2
+        elif self.direction1 == 'down':
+            c2 = ts_2[-1] < self.k2/self.st2
+        else:
+            raise ValueError
+
+        c3 = ((c1.astype(int) + c2.astype(int)) == 2).astype(int)
+        e_payoff = (c3 * self.notional).sum() / c3.shape[0]
+
+        self.pv = e_payoff * self.d
 
     def calculate_present_value(self) -> None:
         getattr(self, self.model)()
