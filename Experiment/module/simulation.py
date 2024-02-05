@@ -15,7 +15,7 @@ class MonteCarlo:
         self.num_path = num_path
         self.num_simulation = num_simulation
         self.num_path_per_year = num_path_per_year
-        np.random.seed(seed=7)
+        # np.random.seed(seed=7)
 
     def univariate_gbm(self, st: float, iv: float, d: float, b: float, r: float):
         """

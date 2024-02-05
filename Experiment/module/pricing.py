@@ -249,6 +249,12 @@ class OptionPricer(Priceable):
             self.greeks['dr'] = np.nan
             self.greeks['dt'] = np.nan
 
+    def calculate_delta(self) -> None:
+        if self.t > 0:
+            self.greeks['dst'] = self._calculate_derivative(parameter1='st', parameter2=None)
+        else:
+            self.greeks['dst'] = np.nan
+
 
 class DualDigitalPricer(Priceable):
     NUM_SIMULATION = 20_000
